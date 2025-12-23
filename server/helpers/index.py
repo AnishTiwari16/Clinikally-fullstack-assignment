@@ -52,3 +52,54 @@ def get_api_key_limiter():
     if not auth or not auth.startswith("Bearer "):
         return None
     return auth.split("Bearer ")[1]
+
+def add_message(session_id, role, content):
+    conn = db_pool.getconn()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            INSERT INTO chat_messages (session_id, role, content)
+            VALUES (%s, %s, %s)
+            """,
+            (session_id, role, content)
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        db_pool.putconn(conn)
+
+
+def get_or_create_session(user_id, session_id=None):
+    conn = db_pool.getconn()
+    cur = conn.cursor()
+    try:
+        # If session_id provided → validate ownership
+        if session_id:
+            cur.execute(
+                """
+                SELECT id FROM chat_sessions
+                WHERE id = %s AND user_id = %s
+                """,
+                (session_id, user_id)
+            )
+            row = cur.fetchone()
+            if row:
+                return session_id
+
+        # Else create a new session
+        cur.execute(
+            """
+            INSERT INTO chat_sessions (user_id)
+            VALUES (%s)
+            RETURNING id
+            """,
+            (user_id,)
+        )
+        new_session_id = cur.fetchone()[0]
+        is_first_chat = True
+        conn.commit()
+        return new_session_id, is_first_chat
+    finally:
+        cur.close()
+        db_pool.putconn(conn)

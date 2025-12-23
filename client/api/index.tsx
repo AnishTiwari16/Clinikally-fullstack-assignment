@@ -57,7 +57,13 @@ export const refreshAccessToken = async () => {
         return false;
     }
 };
-export const queryLLM = async ({ input_query }: { input_query: string }) => {
+export const queryLLM = async ({
+    input_query,
+    session_id,
+}: {
+    input_query: string;
+    session_id: string;
+}) => {
     try {
         const res = await authorizedFetch(`${API_URL}/query`, {
             method: 'POST',
@@ -66,6 +72,7 @@ export const queryLLM = async ({ input_query }: { input_query: string }) => {
             },
             body: JSON.stringify({
                 input_query: input_query,
+                session_id: session_id,
             }),
         });
         if (!res || !(res instanceof Response)) {
@@ -104,6 +111,30 @@ export const getAllSessions = async () => {
         const res = await authorizedFetch(`${API_URL}/get-sessions`, {
             method: 'GET',
         });
+        if (!res || !(res instanceof Response)) {
+            throw new Error('No response from authorizedFetch');
+        }
+
+        const data = await res.json();
+        return data;
+    } catch (err) {
+        console.log('failed to get all sessions', err);
+        return false;
+    }
+};
+
+export const getSessionMessges = async ({
+    session_id,
+}: {
+    session_id: string;
+}) => {
+    try {
+        const res = await authorizedFetch(
+            `${API_URL}/sessions/${session_id}/messages`,
+            {
+                method: 'GET',
+            }
+        );
         if (!res || !(res instanceof Response)) {
             throw new Error('No response from authorizedFetch');
         }

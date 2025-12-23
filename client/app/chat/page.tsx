@@ -1,13 +1,20 @@
 'use client';
-import { addSession, getAllSessions, getUserInfo, queryLLM } from '@/api';
+import {
+    addSession,
+    getAllSessions,
+    getSessionMessges,
+    getUserInfo,
+    queryLLM,
+} from '@/api';
 import { formatTimestamp } from '@/helpers';
 import { useLogOut } from '@/hooks/logout';
 import { queryClient } from '@/providers';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, LogOut, MessageSquare, Plus, Send } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
 type Message = {
@@ -35,7 +42,7 @@ const greetingMessage: Message = {
 const seedThreads: Thread[] = [
     {
         id: 't1',
-        title: 'New conversation',
+        title: 'New Conversation',
         lastUpdated: 'just now',
         preview: greetingMessage.content,
         messages: [greetingMessage],
@@ -50,6 +57,8 @@ export default function ChatPage() {
     const [draft, setDraft] = useState('');
     const { logoutMutation } = useLogOut();
     const router = useRouter();
+    const pathname = usePathname();
+    const sessionId = pathname?.split('/chat/')[1];
     const {
         data: userInfo,
         isError: unauthorized,
@@ -59,11 +68,17 @@ export default function ChatPage() {
         queryFn: getUserInfo,
         retry: 0,
     });
-    const { data: sessionList } = useQuery({
+    const { data: sessionList, isSuccess } = useQuery({
         queryKey: ['sesssion_list'],
         queryFn: getAllSessions,
         retry: 0,
         enabled: authorized,
+    });
+    const { data: sessionHistory } = useQuery({
+        queryKey: ['get_session_history'],
+        queryFn: () => getSessionMessges({ session_id: sessionId }),
+        retry: 0,
+        enabled: authorized && isSuccess && sessionList.sessions.length > 0,
     });
     const handleSendMutation = useMutation({
         mutationFn: queryLLM,
@@ -107,7 +122,7 @@ export default function ChatPage() {
             return [
                 {
                     id,
-                    title: 'Conversation',
+                    title: 'New Conversation',
                     lastUpdated: 'just now',
                     preview: greetingMessage.content,
                     messages: [
@@ -121,6 +136,52 @@ export default function ChatPage() {
             ];
         });
     };
+
+    useEffect(() => {
+        if (!authorized || !sessionId || !sessionHistory) return;
+
+        const historyMessages: Message[] = sessionHistory.map(
+            (m: { role: string; content: string }) => ({
+                role:
+                    m.role === 'user' || m.role === 'assistant'
+                        ? m.role
+                        : 'assistant',
+                content: m.content ?? '',
+            })
+        );
+
+        setThreads((prev) => {
+            const existing = prev.find((t) => t.id === sessionId);
+            const preview =
+                historyMessages[historyMessages.length - 1]?.content ??
+                greetingMessage.content;
+
+            if (existing) {
+                return prev.map((t) =>
+                    t.id === sessionId
+                        ? {
+                              ...t,
+                              messages: historyMessages,
+                              preview,
+                          }
+                        : t
+                );
+            }
+
+            return [
+                {
+                    id: sessionId,
+                    title: 'New Conversation',
+                    lastUpdated: 'just now',
+                    preview,
+                    messages: historyMessages,
+                },
+                ...prev,
+            ];
+        });
+
+        setActiveThreadId(sessionId);
+    }, [authorized, sessionId, sessionHistory]);
 
     const handleSend = () => {
         if (!draft.trim() || !activeThread) return;
@@ -155,7 +216,7 @@ export default function ChatPage() {
         );
         setDraft('');
         handleSendMutation.mutate(
-            { input_query: draft.trim() },
+            { input_query: draft.trim(), session_id: sessionId },
             {
                 onSuccess: (data) => {
                     if (!data || !data.response) {
@@ -179,6 +240,7 @@ export default function ChatPage() {
                                 : thread
                         )
                     );
+                    router.push(`/chat/${data.session_id}`);
                 },
                 onError: (error) => {
                     setThreads((prev) =>
@@ -232,11 +294,6 @@ export default function ChatPage() {
         addSessionMutation.mutate();
     };
 
-    const handleSelectSession = (sessionId: string) => {
-        ensureThread(sessionId);
-        setActiveThreadId(sessionId);
-    };
-
     const handleLogout = () => {
         logoutMutation.mutate();
     };
@@ -262,14 +319,20 @@ export default function ChatPage() {
                         New
                     </button>
                 </div>
+
                 <div className="flex-1 space-y-2 overflow-y-auto pr-1">
                     {(sessionList?.sessions ?? []).map((session: any) => {
                         const isActive = session.id === activeThread?.id;
+
                         return (
-                            <button
+                            <Link
                                 key={session.id}
-                                onClick={() => handleSelectSession(session.id)}
-                                className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                                href={`/chat/${session.id}`}
+                                onClick={() => {
+                                    ensureThread(session.id);
+                                    setActiveThreadId(session.id);
+                                }}
+                                className={`w-full block rounded-2xl border px-4 py-3 text-left transition ${
                                     isActive
                                         ? 'border-cyan-500/40 bg-cyan-500/10'
                                         : 'border-white/5 bg-white/5 hover:border-white/15'
@@ -287,7 +350,7 @@ export default function ChatPage() {
                                 <p className="mt-1 line-clamp-2 text-xs text-slate-300">
                                     {greetingMessage.content}
                                 </p>
-                            </button>
+                            </Link>
                         );
                     })}
                 </div>
