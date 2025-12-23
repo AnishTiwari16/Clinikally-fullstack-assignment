@@ -16,7 +16,7 @@ export default function Home() {
             router.replace('/chat');
         },
         onError: (error) => {
-            toast.error(`${error.message}`, {
+            toast.error(`${error}`, {
                 style: {
                     padding: '8px',
                     color: '#000',

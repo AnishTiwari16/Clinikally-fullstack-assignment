@@ -1,11 +1,12 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { Clock, LogOut, MessageSquare, Plus, Send } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { getUserInfo } from '@/api';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { getUserInfo, queryLLM } from '@/api';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useLogOut } from '@/hooks/logout';
+import toast from 'react-hot-toast';
 
 type Message = {
     id: string;
@@ -22,48 +23,20 @@ type Thread = {
     messages: Message[];
 };
 
+const greetingMessage: Message = {
+    id: 'greet-1',
+    role: 'assistant',
+    content: 'Hi there! What would you like to ask?',
+    timestamp: 'just now',
+};
+
 const seedThreads: Thread[] = [
     {
         id: 't1',
-        title: 'Product launch ideas',
-        lastUpdated: '2h ago',
-        preview: 'Brainstorm hooks and landing copy...',
-        messages: [
-            {
-                id: 'm1',
-                role: 'user',
-                content: 'Give me three hooks for a product launch email.',
-                timestamp: '2h ago',
-            },
-            {
-                id: 'm2',
-                role: 'assistant',
-                content:
-                    '1) “Ready when you are.” 2) “We built this for your busiest days.” 3) “One click, all set.”',
-                timestamp: '2h ago',
-            },
-        ],
-    },
-    {
-        id: 't2',
-        title: 'Docs assistant',
-        lastUpdated: 'Yesterday',
-        preview: 'Summarize API limits and error handling...',
-        messages: [
-            {
-                id: 'm3',
-                role: 'user',
-                content: 'Summarize API limits and common errors.',
-                timestamp: 'Yesterday',
-            },
-            {
-                id: 'm4',
-                role: 'assistant',
-                content:
-                    'Rate limits: 120 rpm, burst 300. Handle 429 with retry-after, 401 for invalid token, 404 for missing resource.',
-                timestamp: 'Yesterday',
-            },
-        ],
+        title: 'New conversation',
+        lastUpdated: 'just now',
+        preview: greetingMessage.content,
+        messages: [greetingMessage],
     },
 ];
 
@@ -75,12 +48,10 @@ export default function ChatPage() {
     const [draft, setDraft] = useState('');
     const { logoutMutation } = useLogOut();
     const router = useRouter();
-    const user = {
-        name: 'Ava Williams',
-        email: 'ava@clic.ai',
-        initials: 'AW',
-    };
 
+    const handleSendMutation = useMutation({
+        mutationFn: queryLLM,
+    });
     const activeThread = useMemo(
         () => threads.find((t) => t.id === activeThreadId) ?? threads[0],
         [threads, activeThreadId]
@@ -88,16 +59,12 @@ export default function ChatPage() {
 
     const handleSend = () => {
         if (!draft.trim() || !activeThread) return;
+        const userMessageId = crypto.randomUUID();
+        const assistantMessageId = crypto.randomUUID();
         const newMessage: Message = {
-            id: crypto.randomUUID(),
+            id: userMessageId,
             role: 'user',
             content: draft.trim(),
-            timestamp: 'just now',
-        };
-        const reply: Message = {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: 'Acknowledged. I will process this soon.',
             timestamp: 'just now',
         };
         setThreads((prev) =>
@@ -107,12 +74,80 @@ export default function ChatPage() {
                           ...thread,
                           lastUpdated: 'just now',
                           preview: newMessage.content.slice(0, 80),
-                          messages: [...thread.messages, newMessage, reply],
+                          messages: [
+                              ...thread.messages,
+                              newMessage,
+                              {
+                                  id: assistantMessageId,
+                                  role: 'assistant',
+                                  content: 'Thinking…',
+                                  timestamp: 'just now',
+                              },
+                          ],
                       }
                     : thread
             )
         );
         setDraft('');
+        handleSendMutation.mutate(
+            { input_query: draft.trim() },
+            {
+                onSuccess: (data) => {
+                    if (!data || !data.response) {
+                        toast.error('No response from AI');
+                        return;
+                    }
+                    setThreads((prev) =>
+                        prev.map((thread) =>
+                            thread.id === activeThread.id
+                                ? {
+                                      ...thread,
+                                      messages: thread.messages.map((msg) =>
+                                          msg.id === assistantMessageId
+                                              ? {
+                                                    ...msg,
+                                                    content: data.response,
+                                                }
+                                              : msg
+                                      ),
+                                  }
+                                : thread
+                        )
+                    );
+                },
+                onError: (error) => {
+                    setThreads((prev) =>
+                        prev.map((thread) =>
+                            thread.id === activeThread.id
+                                ? {
+                                      ...thread,
+                                      messages: thread.messages.map((msg) =>
+                                          msg.id === assistantMessageId
+                                              ? {
+                                                    ...msg,
+                                                    content:
+                                                        'Failed to fetch response.',
+                                                }
+                                              : msg
+                                      ),
+                                  }
+                                : thread
+                        )
+                    );
+                    toast.error(`${error}`, {
+                        style: {
+                            padding: '8px',
+                            color: '#000',
+                            backgroundColor: '#9ca3af',
+                        },
+                        iconTheme: {
+                            primary: '#00b8db',
+                            secondary: '#000',
+                        },
+                    });
+                },
+            }
+        );
     };
 
     const handleNewThread = () => {
@@ -121,8 +156,13 @@ export default function ChatPage() {
             id,
             title: 'New conversation',
             lastUpdated: 'just now',
-            preview: 'Start typing to brief the assistant...',
-            messages: [],
+            preview: greetingMessage.content,
+            messages: [
+                {
+                    ...greetingMessage,
+                    id: `greet-${id}`,
+                },
+            ],
         };
         setThreads((prev) => [next, ...prev]);
         setActiveThreadId(id);
@@ -234,7 +274,7 @@ export default function ChatPage() {
                     </button>
                 </header>
 
-                <section className="flex flex-1 flex-col gap-4 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 px-4 py-6 sm:px-8">
+                <section className="flex flex-1 flex-col gap-4 bg-linear-to-b from-slate-950 via-slate-900 to-slate-950 px-4 py-6 sm:px-8">
                     <div className="flex-1 space-y-4 overflow-y-auto rounded-3xl border border-white/10 bg-white/5 p-4 sm:p-6">
                         {activeThread && activeThread.messages.length === 0 && (
                             <p className="text-sm text-slate-400">
@@ -268,7 +308,6 @@ export default function ChatPage() {
                             </div>
                         ))}
                     </div>
-
                     <div className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/70 p-3 shadow-inner shadow-black/40 sm:p-4">
                         <div className="flex items-end gap-3">
                             <textarea
@@ -286,7 +325,11 @@ export default function ChatPage() {
                             <button
                                 onClick={handleSend}
                                 className="mb-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-500/30 transition hover:-translate-y-px hover:bg-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-300/60 disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={!draft.trim() || isError}
+                                disabled={
+                                    !draft.trim() ||
+                                    isError ||
+                                    handleSendMutation.isPending
+                                }
                             >
                                 <Send className="h-4 w-4" />
                                 Send
@@ -309,27 +352,6 @@ export default function ChatPage() {
                                 </button>
                             </div>
                         )}
-                    </div>
-
-                    <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 md:hidden">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500 text-sm font-semibold text-slate-950">
-                            {user.initials}
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-sm font-semibold text-white">
-                                {user.name}
-                            </p>
-                            <p className="text-xs text-slate-400">
-                                {user.email}
-                            </p>
-                        </div>
-                        <button
-                            onClick={handleLogout}
-                            className="inline-flex items-center justify-center rounded-full border border-white/10 p-2 text-slate-200 transition hover:border-white/20 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30"
-                            aria-label="Log out"
-                        >
-                            <LogOut className="h-4 w-4" />
-                        </button>
                     </div>
                 </section>
             </main>
