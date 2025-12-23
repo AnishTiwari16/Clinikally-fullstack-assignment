@@ -365,7 +365,7 @@ export default function ChatPage() {
                 </div>
 
                 <div className="flex-1 space-y-2 overflow-y-auto pr-1">
-                    {isSessionPending ? (
+                    {authorized && isSessionPending ? (
                         <LoadingShimmer />
                     ) : (
                         sessionList?.sessions.map((session) => (
