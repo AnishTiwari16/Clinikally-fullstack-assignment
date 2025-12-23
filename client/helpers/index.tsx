@@ -1,3 +1,4 @@
+'use client';
 import { refreshAccessToken } from '@/api';
 
 export const authorizedFetch = async (
