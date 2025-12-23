@@ -97,9 +97,8 @@ def get_or_create_session(user_id, session_id=None):
             (user_id,)
         )
         new_session_id = cur.fetchone()[0]
-        is_first_chat = True
         conn.commit()
-        return new_session_id, is_first_chat
+        return new_session_id
     finally:
         cur.close()
         db_pool.putconn(conn)

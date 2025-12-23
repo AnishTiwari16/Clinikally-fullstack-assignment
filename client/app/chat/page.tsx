@@ -473,37 +473,39 @@ export default function ChatPage() {
                             </>
                         ) : (
                             <>
-                                {activeThread?.messages.map((message) => (
-                                    <div
-                                        key={message.id}
-                                        className={`flex ${
-                                            message.role === 'user'
-                                                ? 'justify-end'
-                                                : 'justify-start'
-                                        }`}
-                                    >
+                                {activeThread?.messages.map(
+                                    (message, index) => (
                                         <div
-                                            className={`max-w-3xl rounded-2xl px-4 py-3 text-sm leading-relaxed shadow ${
+                                            key={index}
+                                            className={`flex ${
                                                 message.role === 'user'
-                                                    ? 'bg-cyan-500 text-slate-950 shadow-cyan-500/30'
-                                                    : 'bg-white/10 text-slate-100 border border-white/10'
+                                                    ? 'justify-end'
+                                                    : 'justify-start'
                                             }`}
                                         >
-                                            <ReactMarkdown
-                                                remarkPlugins={[remarkGfm]}
-                                                rehypePlugins={[
-                                                    rehypeHighlight,
-                                                ]}
+                                            <div
+                                                className={`max-w-3xl rounded-2xl px-4 py-3 text-sm leading-relaxed shadow ${
+                                                    message.role === 'user'
+                                                        ? 'bg-cyan-500 text-slate-950 shadow-cyan-500/30'
+                                                        : 'bg-white/10 text-slate-100 border border-white/10'
+                                                }`}
                                             >
-                                                {message.content}
-                                            </ReactMarkdown>
+                                                <ReactMarkdown
+                                                    remarkPlugins={[remarkGfm]}
+                                                    rehypePlugins={[
+                                                        rehypeHighlight,
+                                                    ]}
+                                                >
+                                                    {message.content}
+                                                </ReactMarkdown>
 
-                                            <span className="mt-1 block text-[11px] text-slate-300/80">
-                                                {message.timestamp}
-                                            </span>
+                                                <span className="mt-1 block text-[11px] text-slate-300/80">
+                                                    {message.timestamp}
+                                                </span>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    )
+                                )}
                             </>
                         )}
                     </div>
@@ -512,6 +514,18 @@ export default function ChatPage() {
                             <textarea
                                 value={draft}
                                 onChange={(e) => setDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        if (
+                                            draft.trim() &&
+                                            !unauthorized &&
+                                            !handleSendMutation.isPending
+                                        ) {
+                                            handleSend();
+                                        }
+                                    }
+                                }}
                                 placeholder={
                                     unauthorized
                                         ? 'Session expired. Please log in to continue.'

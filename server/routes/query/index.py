@@ -10,18 +10,17 @@ def query_llm():
         if not input_query:
              return jsonify({"error": "Input query is required"}), 500
         user_id = get_internal_user_id()
-        session_id, is_first_chat = get_or_create_session(user_id, session_id)
-        add_message(session_id, "user", input_query)
+        extracted_session_id = get_or_create_session(user_id, session_id)
+        add_message(extracted_session_id, "user", input_query)
         client = genai.Client()
         response = client.models.generate_content(
             model="gemini-2.5-flash", contents=input_query
         )
-        add_message(session_id, "assistant", response.text)
+        add_message(extracted_session_id, "assistant", response.text)
         response_payload = {
-            'response' : response.text
+            'response' : response.text,
+            'session_id' : extracted_session_id
         }
-        if is_first_chat:
-            response_payload["session_id"] = session_id
         return jsonify(response_payload), 200;
     
     except Exception as e:
