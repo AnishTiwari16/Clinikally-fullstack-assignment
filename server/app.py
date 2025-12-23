@@ -13,7 +13,7 @@ from helpers.index import get_api_key_limiter
 # Initialize Flask app
 app = Flask(__name__)
 
-CORS(app, supports_credentials=True, origins=["http://localhost:3000"])
+CORS(app, supports_credentials=True, origins=["http://localhost:3000", 'https://clinikally-client.vercel.app'])
 
 limiter = Limiter(
     key_func=get_api_key_limiter,
