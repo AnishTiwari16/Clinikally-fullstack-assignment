@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { ReactNode, useLayoutEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
+import { getAccessToken } from '@/utils/storage';
 
 export const queryClient = new QueryClient();
 
@@ -12,7 +13,7 @@ const Providers = ({ children }: { children: ReactNode }) => {
     const pathname = usePathname();
 
     useLayoutEffect(() => {
-        const token = localStorage.getItem('access_token');
+        const token = getAccessToken();
 
         // Only redirect to /chat if user has token and is NOT already on a chat page
         if (token && !pathname?.startsWith('/chat')) {

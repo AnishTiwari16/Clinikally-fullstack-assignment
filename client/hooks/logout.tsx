@@ -1,10 +1,11 @@
 import { useRouter } from 'next/navigation';
+import { removeAccessToken } from '@/utils/storage';
 
 export function useLogOut() {
     const router = useRouter();
 
     const logout = async () => {
-        localStorage.removeItem('access_token');
+        removeAccessToken();
         router.push('/');
     };
 

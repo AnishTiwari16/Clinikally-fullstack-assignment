@@ -4,28 +4,19 @@ import { CredentialResponse, GoogleLogin } from '@react-oauth/google';
 import { useMutation } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
+import { showErrorToast } from '@/utils/toast';
 
 export default function Home() {
     const router = useRouter();
     const mutation = useMutation({
         mutationFn: loginApi,
-        onSuccess: (data) => {
-            localStorage.setItem('access_token', data.access_token);
+        onSuccess: () => {
             router.replace('/chat');
         },
         onError: (error) => {
-            toast.error(`${error}`, {
-                style: {
-                    padding: '8px',
-                    color: '#000',
-                    backgroundColor: '#9ca3af',
-                },
-                iconTheme: {
-                    primary: '#00b8db',
-                    secondary: '#000',
-                },
-            });
+            showErrorToast(
+                error instanceof Error ? error.message : String(error)
+            );
         },
     });
     return (

@@ -1,46 +1,61 @@
 import { API_URL } from '@/config';
-import { authorizedFetch } from '@/helpers';
+import { setAccessToken } from '@/utils/storage';
+import { authorizedFetch, parseJsonResponse } from '@/utils/api';
+import type {
+    LoginResponse,
+    UserInfoResponse,
+    SessionListResponse,
+    SessionHistoryItem,
+    QueryResponse,
+    AddSessionResponse,
+} from '@/types';
 
-export const loginApi = async ({ id_token }: { id_token: string }) => {
-    try {
-        const res = await fetch(`${API_URL}/login`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                Authorization: `Bearer ${id_token}`,
-            },
-        });
-        const data = await res.json();
-        if (!res.ok) {
-            throw new Error(data.error || 'Login failed');
-        }
-        return data;
-    } catch (error) {
-        throw error;
+/**
+ * Login with Google ID token
+ */
+export const loginApi = async ({
+    id_token,
+}: {
+    id_token: string;
+}): Promise<LoginResponse> => {
+    const res = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            Authorization: `Bearer ${id_token}`,
+        },
+    });
+
+    const data = await parseJsonResponse<LoginResponse | { error: string }>(
+        res
+    );
+
+    if ('error' in data) {
+        throw new Error(data.error || 'Login failed');
     }
-};
-export const getUserInfo = async () => {
-    try {
-        const res = await authorizedFetch(`${API_URL}/user-info`, {
-            method: 'GET',
-        });
 
-        if (!res || !(res instanceof Response)) {
-            throw new Error('No response from authorizedFetch');
-        }
-
-        const data = await res.json();
-
-        if (!res.ok) {
-            throw new Error(data.error || 'Fetching user info failed');
-        }
-        return data;
-    } catch (error) {
-        console.error('Error fetching user info:', error);
-        throw error;
+    if (data.access_token) {
+        setAccessToken(data.access_token);
     }
+
+    return data;
 };
-export const refreshAccessToken = async () => {
+
+/**
+ * Get current user information
+ */
+export const getUserInfo = async (): Promise<UserInfoResponse> => {
+    const res = await authorizedFetch(`${API_URL}/user-info`, {
+        method: 'GET',
+    });
+
+    return parseJsonResponse<UserInfoResponse>(res);
+};
+
+/**
+ * Refresh access token
+ */
+export const refreshAccessToken = async (): Promise<boolean> => {
     try {
         const res = await fetch(`${API_URL}/refresh-token`, {
             method: 'POST',
@@ -49,100 +64,72 @@ export const refreshAccessToken = async () => {
 
         if (!res.ok) return false;
 
-        const data = await res.json();
-        localStorage.setItem('access_token', data.access_token);
+        const data = await parseJsonResponse<{ access_token: string }>(res);
+        setAccessToken(data.access_token);
         return true;
     } catch (err) {
         console.error('Failed to refresh access token:', err);
         return false;
     }
 };
+
+/**
+ * Query LLM with input and session
+ */
 export const queryLLM = async ({
     input_query,
     session_id,
 }: {
     input_query: string;
     session_id: string;
-}) => {
-    try {
-        const res = await authorizedFetch(`${API_URL}/query`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                input_query: input_query,
-                session_id: session_id,
-            }),
-        });
-        if (!res || !(res instanceof Response)) {
-            throw new Error('No response from authorizedFetch');
-        }
+}): Promise<QueryResponse> => {
+    const res = await authorizedFetch(`${API_URL}/query`, {
+        method: 'POST',
+        body: JSON.stringify({
+            input_query,
+            session_id,
+        }),
+    });
 
-        const data = await res.json();
-        return data;
-    } catch (err) {
-        console.log('failed to query', err);
-        return false;
-    }
+    return parseJsonResponse<QueryResponse>(res);
 };
 
-export const addSession = async () => {
-    try {
-        const res = await authorizedFetch(`${API_URL}/add-session`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-        if (!res || !(res instanceof Response)) {
-            throw new Error('No response from authorizedFetch');
-        }
+/**
+ * Create a new session
+ */
+export const addSession = async (): Promise<AddSessionResponse> => {
+    const res = await authorizedFetch(`${API_URL}/add-session`, {
+        method: 'POST',
+    });
 
-        const data = await res.json();
-        return data;
-    } catch (err) {
-        console.log('failed to query', err);
-        return false;
-    }
-};
-export const getAllSessions = async () => {
-    try {
-        const res = await authorizedFetch(`${API_URL}/get-sessions`, {
-            method: 'GET',
-        });
-        if (!res || !(res instanceof Response)) {
-            throw new Error('No response from authorizedFetch');
-        }
-
-        const data = await res.json();
-        return data;
-    } catch (err) {
-        console.log('failed to get all sessions', err);
-        return false;
-    }
+    return parseJsonResponse<AddSessionResponse>(res);
 };
 
+/**
+ * Get all user sessions
+ */
+export const getAllSessions = async (): Promise<SessionListResponse> => {
+    const res = await authorizedFetch(`${API_URL}/get-sessions`, {
+        method: 'GET',
+    });
+
+    return parseJsonResponse<SessionListResponse>(res);
+};
+
+/**
+ * Get messages for a specific session
+ */
 export const getSessionMessges = async ({
     session_id,
 }: {
     session_id: string;
-}) => {
-    try {
-        const res = await authorizedFetch(
-            `${API_URL}/sessions/${session_id}/messages`,
-            {
-                method: 'GET',
-            }
-        );
-        if (!res || !(res instanceof Response)) {
-            throw new Error('No response from authorizedFetch');
+}): Promise<SessionHistoryItem[]> => {
+    const res = await authorizedFetch(
+        `${API_URL}/sessions/${session_id}/messages`,
+        {
+            method: 'GET',
         }
+    );
 
-        const data = await res.json();
-        return data;
-    } catch (err) {
-        console.log('failed to get all sessions', err);
-        return false;
-    }
+    return parseJsonResponse<SessionHistoryItem[]>(res);
 };
