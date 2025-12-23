@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from flask import g
+from flask import g, request
 from db.index import db_pool
 import jwt
 import os
@@ -46,3 +46,9 @@ def get_internal_user_id():
             cur.close()
         if conn:
             db_pool.putconn(conn)
+
+def get_api_key_limiter():
+    auth = request.headers.get("Authorization")
+    if not auth or not auth.startswith("Bearer "):
+        return None
+    return auth.split("Bearer ")[1]

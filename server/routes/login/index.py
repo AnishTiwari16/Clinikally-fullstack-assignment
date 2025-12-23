@@ -30,7 +30,6 @@ def onboard_user(email, profile_url):
             )
         return response, 200
     except Exception as e:
-        print(e)
         if conn:
                 conn.rollback()
         return jsonify({"error": "Something went wrong!"}), 500
