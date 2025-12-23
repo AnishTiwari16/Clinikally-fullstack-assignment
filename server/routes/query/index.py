@@ -1,9 +1,7 @@
 from flask import jsonify, request
 from anthropic import Anthropic
 from google import genai
-import os
 
-CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
 
 def query_llm():
     try:

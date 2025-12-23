@@ -79,3 +79,39 @@ export const queryLLM = async ({ input_query }: { input_query: string }) => {
         return false;
     }
 };
+
+export const addSession = async () => {
+    try {
+        const res = await authorizedFetch(`${API_URL}/add-session`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+        if (!res || !(res instanceof Response)) {
+            throw new Error('No response from authorizedFetch');
+        }
+
+        const data = await res.json();
+        return data;
+    } catch (err) {
+        console.log('failed to query', err);
+        return false;
+    }
+};
+export const getAllSessions = async () => {
+    try {
+        const res = await authorizedFetch(`${API_URL}/get-sessions`, {
+            method: 'GET',
+        });
+        if (!res || !(res instanceof Response)) {
+            throw new Error('No response from authorizedFetch');
+        }
+
+        const data = await res.json();
+        return data;
+    } catch (err) {
+        console.log('failed to get all sessions', err);
+        return false;
+    }
+};

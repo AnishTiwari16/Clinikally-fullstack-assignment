@@ -1,11 +1,13 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
-import { Clock, LogOut, MessageSquare, Plus, Send } from 'lucide-react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { getUserInfo, queryLLM } from '@/api';
-import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import { addSession, getAllSessions, getUserInfo, queryLLM } from '@/api';
+import { formatTimestamp } from '@/helpers';
 import { useLogOut } from '@/hooks/logout';
+import { queryClient } from '@/providers';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Clock, LogOut, MessageSquare, Plus, Send } from 'lucide-react';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
 type Message = {
@@ -48,14 +50,77 @@ export default function ChatPage() {
     const [draft, setDraft] = useState('');
     const { logoutMutation } = useLogOut();
     const router = useRouter();
-
+    const {
+        data: userInfo,
+        isError: unauthorized,
+        isSuccess: authorized,
+    } = useQuery({
+        queryKey: ['users_info'],
+        queryFn: getUserInfo,
+        retry: 0,
+    });
+    const { data: sessionList } = useQuery({
+        queryKey: ['sesssion_list'],
+        queryFn: getAllSessions,
+        retry: 0,
+        enabled: authorized,
+    });
     const handleSendMutation = useMutation({
         mutationFn: queryLLM,
+    });
+    const addSessionMutation = useMutation({
+        mutationFn: addSession,
+        onSuccess: (data) => {
+            const session = data?.session;
+            if (session?.id) {
+                queryClient.setQueryData(['sesssion_list'], (old: any) => {
+                    if (!old || !old.sessions) return { sessions: [session] };
+                    return { sessions: [session, ...old.sessions] };
+                });
+                ensureThread(session.id);
+                setActiveThreadId(session.id);
+            }
+        },
+        onError: (error) => {
+            toast.error(`${error}`, {
+                style: {
+                    padding: '8px',
+                    color: '#000',
+                    backgroundColor: '#9ca3af',
+                },
+                iconTheme: {
+                    primary: '#00b8db',
+                    secondary: '#000',
+                },
+            });
+        },
     });
     const activeThread = useMemo(
         () => threads.find((t) => t.id === activeThreadId) ?? threads[0],
         [threads, activeThreadId]
     );
+
+    const ensureThread = (id: string) => {
+        setThreads((prev) => {
+            const exists = prev.find((t) => t.id === id);
+            if (exists) return prev;
+            return [
+                {
+                    id,
+                    title: 'Conversation',
+                    lastUpdated: 'just now',
+                    preview: greetingMessage.content,
+                    messages: [
+                        {
+                            ...greetingMessage,
+                            id: `greet-${id}`,
+                        },
+                    ],
+                },
+                ...prev,
+            ];
+        });
+    };
 
     const handleSend = () => {
         if (!draft.trim() || !activeThread) return;
@@ -151,36 +216,31 @@ export default function ChatPage() {
     };
 
     const handleNewThread = () => {
-        const id = crypto.randomUUID();
-        const next: Thread = {
-            id,
-            title: 'New conversation',
-            lastUpdated: 'just now',
-            preview: greetingMessage.content,
-            messages: [
-                {
-                    ...greetingMessage,
-                    id: `greet-${id}`,
+        if (unauthorized) {
+            return toast.error(`You need to Login first`, {
+                style: {
+                    padding: '8px',
+                    color: '#000',
+                    backgroundColor: '#9ca3af',
                 },
-            ],
-        };
-        setThreads((prev) => [next, ...prev]);
-        setActiveThreadId(id);
-        setDraft('');
+                iconTheme: {
+                    primary: '#00b8db',
+                    secondary: '#000',
+                },
+            });
+        }
+        addSessionMutation.mutate();
+    };
+
+    const handleSelectSession = (sessionId: string) => {
+        ensureThread(sessionId);
+        setActiveThreadId(sessionId);
     };
 
     const handleLogout = () => {
         logoutMutation.mutate();
     };
-    const {
-        data: userInfo,
-        isError,
-        isSuccess,
-    } = useQuery({
-        queryKey: ['users_info'],
-        queryFn: getUserInfo,
-        retry: 0,
-    });
+
     return (
         <div className="flex min-h-screen bg-slate-950 text-slate-50">
             <aside className="hidden w-80 flex-col border-r border-white/10 bg-slate-950/40 p-4 md:flex">
@@ -191,19 +251,24 @@ export default function ChatPage() {
                     </div>
                     <button
                         onClick={handleNewThread}
-                        className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20"
+                        className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed disabled:opacity-70"
+                        disabled={addSessionMutation.isPending}
                     >
-                        <Plus className="h-3.5 w-3.5" />
+                        {addSessionMutation.isPending ? (
+                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
+                        ) : (
+                            <Plus className="h-3.5 w-3.5" />
+                        )}
                         New
                     </button>
                 </div>
                 <div className="flex-1 space-y-2 overflow-y-auto pr-1">
-                    {threads.map((thread) => {
-                        const isActive = thread.id === activeThread?.id;
+                    {(sessionList?.sessions ?? []).map((session: any) => {
+                        const isActive = session.id === activeThread?.id;
                         return (
                             <button
-                                key={thread.id}
-                                onClick={() => setActiveThreadId(thread.id)}
+                                key={session.id}
+                                onClick={() => handleSelectSession(session.id)}
                                 className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
                                     isActive
                                         ? 'border-cyan-500/40 bg-cyan-500/10'
@@ -212,22 +277,22 @@ export default function ChatPage() {
                             >
                                 <div className="flex items-center justify-between text-xs text-slate-300">
                                     <span className="font-semibold text-white">
-                                        {thread.title}
+                                        Conversation
                                     </span>
                                     <span className="flex items-center gap-1 text-[11px] text-slate-400">
                                         <Clock className="h-3 w-3" />
-                                        {thread.lastUpdated}
+                                        {formatTimestamp(session.created_at)}
                                     </span>
                                 </div>
                                 <p className="mt-1 line-clamp-2 text-xs text-slate-300">
-                                    {thread.preview}
+                                    {greetingMessage.content}
                                 </p>
                             </button>
                         );
                     })}
                 </div>
 
-                {isSuccess && (
+                {authorized && (
                     <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
                         <div className="flex items-center gap-3">
                             <Image
@@ -314,12 +379,12 @@ export default function ChatPage() {
                                 value={draft}
                                 onChange={(e) => setDraft(e.target.value)}
                                 placeholder={
-                                    isError
+                                    unauthorized
                                         ? 'Session expired. Please log in to continue.'
                                         : 'Ask anything…'
                                 }
                                 rows={2}
-                                disabled={isError}
+                                disabled={unauthorized}
                                 className="min-h-[72px] flex-1 resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-400 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-60"
                             />
                             <button
@@ -327,7 +392,7 @@ export default function ChatPage() {
                                 className="mb-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-500/30 transition hover:-translate-y-px hover:bg-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-300/60 disabled:cursor-not-allowed disabled:opacity-60"
                                 disabled={
                                     !draft.trim() ||
-                                    isError ||
+                                    unauthorized ||
                                     handleSendMutation.isPending
                                 }
                             >
@@ -336,7 +401,7 @@ export default function ChatPage() {
                             </button>
                         </div>
 
-                        {isError && (
+                        {unauthorized && (
                             <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-100">
                                 <span className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">
                                     Session needed
