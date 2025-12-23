@@ -9,28 +9,25 @@ import {
 import { formatTimestamp } from '@/helpers';
 import { useLogOut } from '@/hooks/logout';
 import { queryClient } from '@/providers';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Clock, LogOut, MessageSquare, Plus, Send } from 'lucide-react';
+import { Message, Thread } from '@/types';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import {
+    Clock,
+    LogOut,
+    Menu,
+    MessageSquare,
+    Plus,
+    Send,
+    X,
+} from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-
-type Message = {
-    id: string;
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp: string;
-};
-
-type Thread = {
-    id: string;
-    title: string;
-    lastUpdated: string;
-    preview: string;
-    messages: Message[];
-};
+import ReactMarkdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
+import remarkGfm from 'remark-gfm';
 
 const greetingMessage: Message = {
     id: 'greet-1',
@@ -55,6 +52,7 @@ export default function ChatPage() {
         seedThreads[0]?.id
     );
     const [draft, setDraft] = useState('');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const { logoutMutation } = useLogOut();
     const router = useRouter();
     const pathname = usePathname();
@@ -68,17 +66,17 @@ export default function ChatPage() {
         queryFn: getUserInfo,
         retry: 0,
     });
-    const { data: sessionList, isSuccess } = useQuery({
+    const { data: sessionList, isPending: isSessionPending } = useQuery({
         queryKey: ['sesssion_list'],
         queryFn: getAllSessions,
         retry: 0,
         enabled: authorized,
     });
-    const { data: sessionHistory } = useQuery({
+    const { data: sessionHistory, isFetching } = useQuery({
         queryKey: ['get_session_history'],
         queryFn: () => getSessionMessges({ session_id: sessionId }),
         retry: 0,
-        enabled: authorized && isSuccess && sessionList.sessions.length > 0,
+        enabled: authorized && !!sessionId,
     });
     const handleSendMutation = useMutation({
         mutationFn: queryLLM,
@@ -94,6 +92,7 @@ export default function ChatPage() {
                 });
                 ensureThread(session.id);
                 setActiveThreadId(session.id);
+                setIsSidebarOpen(false);
             }
         },
         onError: (error) => {
@@ -295,64 +294,107 @@ export default function ChatPage() {
     };
 
     const handleLogout = () => {
+        setIsSidebarOpen(false);
         logoutMutation.mutate();
     };
 
     return (
-        <div className="flex min-h-screen bg-slate-950 text-slate-50">
-            <aside className="hidden w-80 flex-col border-r border-white/10 bg-slate-950/40 p-4 md:flex">
+        <div className="flex h-screen bg-slate-950 text-slate-50 overflow-hidden">
+            {/* Mobile Overlay */}
+            {isSidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-40 md:hidden"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
+
+            {/* Sidebar */}
+            <aside
+                className={`fixed md:static inset-y-0 left-0 z-50 w-80 flex-col border-r border-white/10 bg-slate-950 p-4 transform transition-transform duration-300 ease-in-out ${
+                    isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                } md:translate-x-0 md:flex`}
+            >
                 <div className="mb-4 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-sm font-semibold">
                         <MessageSquare className="h-4 w-4 text-cyan-300" />
                         Threads
                     </div>
-                    <button
-                        onClick={handleNewThread}
-                        className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed disabled:opacity-70"
-                        disabled={addSessionMutation.isPending}
-                    >
-                        {addSessionMutation.isPending ? (
-                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
-                        ) : (
-                            <Plus className="h-3.5 w-3.5" />
-                        )}
-                        New
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleNewThread}
+                            className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed disabled:opacity-70"
+                            disabled={addSessionMutation.isPending}
+                        >
+                            {addSessionMutation.isPending ? (
+                                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
+                            ) : (
+                                <Plus className="h-3.5 w-3.5" />
+                            )}
+                            New
+                        </button>
+                        <button
+                            onClick={() => setIsSidebarOpen(false)}
+                            className="md:hidden inline-flex items-center justify-center rounded-lg bg-white/10 p-1.5 text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20"
+                            aria-label="Close sidebar"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex-1 space-y-2 overflow-y-auto pr-1">
-                    {(sessionList?.sessions ?? []).map((session: any) => {
-                        const isActive = session.id === activeThread?.id;
-
-                        return (
-                            <Link
-                                key={session.id}
-                                href={`/chat/${session.id}`}
-                                onClick={() => {
-                                    ensureThread(session.id);
-                                    setActiveThreadId(session.id);
-                                }}
-                                className={`w-full block rounded-2xl border px-4 py-3 text-left transition ${
-                                    isActive
-                                        ? 'border-cyan-500/40 bg-cyan-500/10'
-                                        : 'border-white/5 bg-white/5 hover:border-white/15'
-                                }`}
-                            >
-                                <div className="flex items-center justify-between text-xs text-slate-300">
-                                    <span className="font-semibold text-white">
-                                        Conversation
-                                    </span>
-                                    <span className="flex items-center gap-1 text-[11px] text-slate-400">
-                                        <Clock className="h-3 w-3" />
-                                        {formatTimestamp(session.created_at)}
-                                    </span>
+                    {isSessionPending ? (
+                        <>
+                            {[1, 2].map((i) => (
+                                <div
+                                    key={`session-shimmer-${i}`}
+                                    className="w-full rounded-2xl border border-white/5 bg-white/5 px-4 py-3"
+                                >
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="h-3 bg-white/20 rounded animate-pulse w-24" />
+                                        <div className="h-3 bg-white/10 rounded animate-pulse w-16" />
+                                    </div>
+                                    <div className="h-3 bg-white/10 rounded animate-pulse w-full" />
                                 </div>
-                                <p className="mt-1 line-clamp-2 text-xs text-slate-300">
-                                    {greetingMessage.content}
-                                </p>
-                            </Link>
-                        );
-                    })}
+                            ))}
+                        </>
+                    ) : (
+                        (sessionList?.sessions).map((session: any) => {
+                            const isActive = session.id === activeThread?.id;
+
+                            return (
+                                <Link
+                                    key={session.id}
+                                    href={`/chat/${session.id}`}
+                                    onClick={() => {
+                                        ensureThread(session.id);
+                                        setActiveThreadId(session.id);
+                                        setIsSidebarOpen(false);
+                                    }}
+                                    className={`w-full block rounded-2xl border px-4 py-3 text-left transition ${
+                                        isActive
+                                            ? 'border-cyan-500/40 bg-cyan-500/10'
+                                            : 'border-white/5 bg-white/5 hover:border-white/15'
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between text-xs text-slate-300">
+                                        <span className="font-semibold text-white">
+                                            Conversation
+                                        </span>
+                                        <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                                            <Clock className="h-3 w-3" />
+                                            {formatTimestamp(
+                                                session.created_at
+                                            )}
+                                        </span>
+                                    </div>
+                                    <p className="mt-1 line-clamp-2 text-xs text-slate-300">
+                                        {greetingMessage.content}
+                                    </p>
+                                </Link>
+                            );
+                        })
+                    )}
                 </div>
 
                 {authorized && (
@@ -383,60 +425,89 @@ export default function ChatPage() {
                 )}
             </aside>
 
-            <main className="flex flex-1 flex-col">
-                <header className="flex items-center justify-between border-b border-white/10 bg-slate-900/60 px-6 py-4">
-                    <div>
-                        <p className="text-sm uppercase tracking-[0.22em] text-slate-400">
-                            Chat console
-                        </p>
-                        <h1 className="text-xl font-semibold text-white">
-                            {activeThread?.title ?? 'Conversation'}
-                        </h1>
+            <main className="flex flex-1 flex-col overflow-hidden">
+                <header className="flex items-center justify-between border-b border-white/10 bg-slate-900/60 px-4 sm:px-6 py-4 shrink-0">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setIsSidebarOpen(true)}
+                            className="md:hidden inline-flex items-center justify-center rounded-lg bg-white/10 p-2 text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20"
+                            aria-label="Open sidebar"
+                        >
+                            <Menu className="h-5 w-5" />
+                        </button>
+                        <div>
+                            <p className="text-sm uppercase tracking-[0.22em] text-slate-400">
+                                Chat console
+                            </p>
+                            <h1 className="text-xl font-semibold text-white">
+                                {activeThread?.title ?? 'Conversation'}
+                            </h1>
+                        </div>
                     </div>
                     <button
                         onClick={handleNewThread}
                         className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-3 py-2 text-sm font-semibold text-slate-950 shadow-cyan-500/30 transition hover:bg-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-300/60"
                     >
                         <Plus className="h-4 w-4" />
-                        New chat
+                        <span className="hidden sm:inline">New chat</span>
                     </button>
                 </header>
 
-                <section className="flex flex-1 flex-col gap-4 bg-linear-to-b from-slate-950 via-slate-900 to-slate-950 px-4 py-6 sm:px-8">
-                    <div className="flex-1 space-y-4 overflow-y-auto rounded-3xl border border-white/10 bg-white/5 p-4 sm:p-6">
-                        {activeThread && activeThread.messages.length === 0 && (
-                            <p className="text-sm text-slate-400">
-                                No messages yet. Brief the assistant to get
-                                started.
-                            </p>
+                <section className="flex flex-1 flex-col gap-4 bg-linear-to-b from-slate-950 via-slate-900 to-slate-950 px-4 py-6 sm:px-8 overflow-hidden min-h-0">
+                    <div className="flex-1 space-y-4 overflow-y-auto rounded-3xl border border-white/10 bg-white/5 p-4 sm:p-6 min-h-0">
+                        {isFetching && sessionId ? (
+                            <>
+                                {[1, 2].map((i) => (
+                                    <div
+                                        key={`shimmer-${i}`}
+                                        className="flex justify-start"
+                                    >
+                                        <div className="max-w-3xl rounded-2xl bg-white/10 border border-white/10 px-4 py-3 w-full">
+                                            <div className="space-y-2">
+                                                <div className="h-3 bg-white/20 rounded animate-pulse" />
+                                            </div>
+                                            <div className="mt-2 h-3 bg-white/10 rounded animate-pulse w-16" />
+                                        </div>
+                                    </div>
+                                ))}
+                            </>
+                        ) : (
+                            <>
+                                {activeThread?.messages.map((message) => (
+                                    <div
+                                        key={message.id}
+                                        className={`flex ${
+                                            message.role === 'user'
+                                                ? 'justify-end'
+                                                : 'justify-start'
+                                        }`}
+                                    >
+                                        <div
+                                            className={`max-w-3xl rounded-2xl px-4 py-3 text-sm leading-relaxed shadow ${
+                                                message.role === 'user'
+                                                    ? 'bg-cyan-500 text-slate-950 shadow-cyan-500/30'
+                                                    : 'bg-white/10 text-slate-100 border border-white/10'
+                                            }`}
+                                        >
+                                            <ReactMarkdown
+                                                remarkPlugins={[remarkGfm]}
+                                                rehypePlugins={[
+                                                    rehypeHighlight,
+                                                ]}
+                                            >
+                                                {message.content}
+                                            </ReactMarkdown>
+
+                                            <span className="mt-1 block text-[11px] text-slate-300/80">
+                                                {message.timestamp}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </>
                         )}
-                        {activeThread?.messages.map((message) => (
-                            <div
-                                key={message.id}
-                                className={`flex ${
-                                    message.role === 'user'
-                                        ? 'justify-end'
-                                        : 'justify-start'
-                                }`}
-                            >
-                                <div
-                                    className={`max-w-3xl rounded-2xl px-4 py-3 text-sm leading-relaxed shadow ${
-                                        message.role === 'user'
-                                            ? 'bg-cyan-500 text-slate-950 shadow-cyan-500/30'
-                                            : 'bg-white/10 text-slate-100 border border-white/10'
-                                    }`}
-                                >
-                                    <p className="whitespace-pre-wrap">
-                                        {message.content}
-                                    </p>
-                                    <span className="mt-1 block text-[11px] text-slate-300/80">
-                                        {message.timestamp}
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
                     </div>
-                    <div className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/70 p-3 shadow-inner shadow-black/40 sm:p-4">
+                    <div className="shrink-0 space-y-3 rounded-3xl border border-white/10 bg-slate-900/70 p-3 shadow-inner shadow-black/40 sm:p-4">
                         <div className="flex items-end gap-3">
                             <textarea
                                 value={draft}
