@@ -31,7 +31,7 @@ const GREETING_MESSAGE: Message = {
 
 const SEED_THREAD: Thread = {
     id: 't1',
-    title: 'New Conversation',
+    title: 'New Chat',
     lastUpdated: 'just now',
     preview: GREETING_MESSAGE.content,
     messages: [GREETING_MESSAGE],
@@ -45,7 +45,7 @@ const createGreetingMessage = (id: string): Message => ({
 
 const createNewThread = (id: string, preview?: string): Thread => ({
     id,
-    title: 'New Conversation',
+    title: 'New Chat',
     lastUpdated: 'just now',
     preview: preview ?? GREETING_MESSAGE.content,
     messages: preview ? [] : [createGreetingMessage(id)],
@@ -193,7 +193,7 @@ export default function ChatPage() {
             return [
                 {
                     id: sessionId,
-                    title: 'New Conversation',
+                    title: 'New Chat',
                     lastUpdated: 'just now',
                     preview,
                     messages:
@@ -422,7 +422,7 @@ export default function ChatPage() {
                                 Chat console
                             </p>
                             <h1 className="text-xl font-semibold text-white">
-                                {activeThread?.title ?? 'Conversation'}
+                                {activeThread?.title ?? 'New Chat'}
                             </h1>
                         </div>
                     </div>

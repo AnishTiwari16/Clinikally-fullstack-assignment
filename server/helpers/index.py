@@ -102,3 +102,49 @@ def get_or_create_session(user_id, session_id=None):
     finally:
         cur.close()
         db_pool.putconn(conn)
+
+def has_previous_messages(session_id):
+    conn = db_pool.getconn()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT COUNT(*) FROM chat_messages
+            WHERE session_id = %s
+            """,
+            (session_id,)
+        )
+        count = cur.fetchone()[0]
+        return count > 0
+    finally:
+        cur.close()
+        db_pool.putconn(conn)
+
+def extract_first_four_words(text):
+    """Extract first four words from text"""
+    if not text:
+        return ""
+    words = text.strip().split()
+    return " ".join(words[:4])
+
+
+def update_session_title_auto(session_id, title):
+    conn = db_pool.getconn()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            UPDATE chat_sessions
+            SET title = %s
+            WHERE id = %s
+            """,
+            (title, session_id)
+        )
+        conn.commit()
+    except Exception as e:
+        print("❌ Error auto-updating session title:", e)
+        if conn:
+            conn.rollback()
+    finally:
+        cur.close()
+        db_pool.putconn(conn)

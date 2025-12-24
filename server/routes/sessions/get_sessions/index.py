@@ -14,7 +14,7 @@ def get_sessions():
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, created_at
+            SELECT id, created_at, title
             FROM chat_sessions
             WHERE user_id = %s
             ORDER BY created_at DESC;
@@ -23,7 +23,11 @@ def get_sessions():
         )
         sessions = cur.fetchall()
         sessions_list = [
-            {"id": row[0], "created_at": row[1].isoformat() if row[1] else None}
+            {
+                "id": row[0],
+                "created_at": row[1].isoformat() if row[1] else None,
+                "title": row[2] if row[2] else None
+            }
             for row in sessions
         ]
         return jsonify({"sessions": sessions_list}), 200

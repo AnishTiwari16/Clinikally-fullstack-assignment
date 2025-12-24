@@ -7,6 +7,7 @@ from routes.user_info.index import user_info
 from routes.sessions.add_session.index import add_session
 from routes.sessions.get_sessions.index import get_sessions
 from routes.sessions.get_session_messages.index import get_session_messages
+from routes.sessions.update_session_title.index import update_session_title
 from middleware.index import require_google_auth, require_auth
 from helpers.index import get_api_key_limiter
 
@@ -50,6 +51,11 @@ def get_sessions_fn():
 @require_auth
 def get_session_messages_fn(session_id):
     return get_session_messages(session_id)
+
+@app.route("/sessions/<session_id>/title", methods=["PUT"])
+@require_auth
+def update_session_title_fn(session_id):
+    return update_session_title(session_id)
 
 
 

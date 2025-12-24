@@ -32,6 +32,7 @@ export type UserInfoResponse = {
 export type Session = {
     id: string;
     created_at: string;
+    title: string;
 };
 
 export type SessionListResponse = {
