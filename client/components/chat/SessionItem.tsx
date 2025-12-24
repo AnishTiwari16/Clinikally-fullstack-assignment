@@ -27,7 +27,7 @@ export const SessionItem: React.FC<SessionItemProps> = ({
         >
             <div className="flex items-center justify-between text-xs text-slate-300">
                 <span className="font-semibold text-white">
-                    {session.title}
+                    {session.title}...
                 </span>
                 <span className="flex items-center gap-1 text-[11px] text-slate-400">
                     <Clock className="h-3 w-3" />
