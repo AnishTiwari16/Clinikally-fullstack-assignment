@@ -474,6 +474,15 @@ export default function ChatPage() {
                             isPending={sendMessageMutation.isPending}
                         />
 
+                        <div className="flex items-center justify-center">
+                            <p className="text-xs text-slate-400/70">
+                                Powered by{' '}
+                                <span className="font-semibold text-slate-300">
+                                    Google Gemini
+                                </span>
+                            </p>
+                        </div>
+
                         {unauthorized && (
                             <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-100">
                                 <span className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">
