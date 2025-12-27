@@ -209,7 +209,8 @@ export default function ChatPage() {
     }, [authorized, sessionId, sessionHistory]);
 
     const handleSend = useCallback(() => {
-        if (!draft.trim() || !activeThread) return;
+        if (!draft.trim() || !activeThread || isSessionPending || isFetching)
+            return;
 
         const userMessageId = crypto.randomUUID();
         const assistantMessageId = crypto.randomUUID();
@@ -437,7 +438,8 @@ export default function ChatPage() {
 
                 <section className="flex flex-1 flex-col gap-4 bg-linear-to-b from-slate-950 via-slate-900 to-slate-950 px-4 py-6 sm:px-8 overflow-hidden min-h-0">
                     <div className="flex-1 space-y-4 overflow-y-auto rounded-3xl border border-white/10 bg-white/5 p-4 sm:p-6 min-h-0">
-                        {isFetching && sessionId ? (
+                        {(isFetching && sessionId) ||
+                        (authorized && isSessionPending) ? (
                             <>
                                 {[1, 2].map((i) => (
                                     <div
